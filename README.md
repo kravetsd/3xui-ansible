@@ -98,13 +98,21 @@ ansible-playbook playbook.yml -i inventory.ini \
 
 At the end of the playbook run you will see two debug messages:
 
-**1. VLESS connection string** — import directly into any VLESS client (v2rayN, Hiddify, Streisand, etc.):
+**1. VLESS connection string** — import directly into any VLESS client (v2rayN, Hiddify, Streisand, etc.) or add manually:
 
 ```
 vless://UUID@1.2.3.4:8443?type=tcp&encryption=none&security=reality&pbk=PUBLIC_KEY&fp=chrome&sni=www.google.com&sid=SHORT_ID&spx=%2F&flow=xtls-rprx-vision#myserver
 ```
 
-**2. xray-core client config** — save as `xray-client-config.json` and run with `xray -c xray-client-config.json`. Exposes a SOCKS5 proxy on `127.0.0.1:1080`.
+**2. Subscription URL** — paste into any client that supports 3x-ui subscriptions (Hiddify, v2rayNG, etc.). The URL serves all your inbounds for this client and updates automatically when you add more:
+
+```
+http://1.2.3.4:2053/sub/CLIENT_SUB_ID
+```
+
+If you configured a domain and SSL cert, it will use `https://` automatically.
+
+**3. xray-core client config** — save as `xray-client-config.json` and run with `xray -c xray-client-config.json`. Exposes a SOCKS5 proxy on `127.0.0.1:1080`.
 
 ### Using xray-core on a client machine with no GUI
 

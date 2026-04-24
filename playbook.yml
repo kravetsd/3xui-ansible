@@ -42,12 +42,21 @@
       changed_when: false
       run_once: true
 
+    - name: Generate client subscription ID
+      delegate_to: localhost
+      become: false
+      command: python3 -c "import secrets; print(secrets.token_hex(16))"
+      register: gen_subid
+      changed_when: false
+      run_once: true
+
     - name: Set crypto facts
       set_fact:
         vless_uuid: "{{ gen_uuid.stdout.strip() }}"
         reality_private_key: "{{ gen_keypair.stdout.strip().split(' ')[0] }}"
         reality_public_key: "{{ gen_keypair.stdout.strip().split(' ')[1] }}"
         reality_short_id: "{{ gen_shortid.stdout.strip() }}"
+        client_sub_id: "{{ gen_subid.stdout.strip() }}"
 
     # ── Install Docker ────────────────────────────────────────────────────────
 
@@ -133,6 +142,10 @@
     - name: VLESS connection string
       debug:
         msg: "vless://{{ vless_uuid }}@{{ ansible_host }}:{{ vpn_port }}?type=tcp&encryption=none&security=reality&pbk={{ reality_public_key }}&fp={{ vless_fingerprint }}&sni={{ vless_sni }}&sid={{ reality_short_id }}&spx=%2F&flow=xtls-rprx-vision#{{ inventory_hostname }}"
+
+    - name: Subscription URL
+      debug:
+        msg: "{{ 'https' if panel_domain and panel_cert_file else 'http' }}://{{ panel_domain if panel_domain else ansible_host }}:{{ panel_port }}{{ panel_path }}sub/{{ client_sub_id }}"
 
     - name: xray-core client config
       debug:
