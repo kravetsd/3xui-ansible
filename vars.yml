@@ -1,6 +1,18 @@
 ---
+# ── VPN inbound ───────────────────────────────────────────────────────────────
 install_dir: /opt/3xui
 vpn_port: 8443
 vless_sni: www.google.com
 vless_fingerprint: chrome
 client_email: client01
+
+# ── Panel ─────────────────────────────────────────────────────────────────────
+panel_port: 2053
+panel_user: admin
+panel_password: admin
+panel_path: /          # custom URL path, e.g. /mypanel/ hides the panel
+
+# Leave empty for HTTP-only (no domain). Set both to enable HTTPS on the panel.
+panel_domain: ""
+panel_cert_file: ""    # absolute path on the VM, e.g. /root/cert/fullchain.pem
+panel_key_file: ""     # absolute path on the VM, e.g. /root/cert/privkey.pem

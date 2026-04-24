@@ -2,6 +2,9 @@ import sqlite3
 import json
 
 db_path = "{{ install_dir }}/db/x-ui.db"
+conn = sqlite3.connect(db_path)
+
+# ── VLESS Reality inbound ─────────────────────────────────────────────────────
 
 settings = json.dumps({
     "clients": [{
@@ -60,9 +63,6 @@ allocate = json.dumps({
     "concurrency": 3
 })
 
-conn = sqlite3.connect(db_path)
-
-# Remove any existing inbounds and insert ours cleanly
 conn.execute("DELETE FROM inbounds")
 conn.execute(
     """
@@ -75,6 +75,29 @@ conn.execute(
     (settings, stream_settings, sniffing, allocate)
 )
 
+# ── Panel settings ────────────────────────────────────────────────────────────
+
+panel_settings = {
+    "webPort":     "{{ panel_port }}",
+    "webDomain":   "{{ panel_domain }}",
+    "webCertFile": "{{ panel_cert_file }}",
+    "webKeyFile":  "{{ panel_key_file }}",
+    "webBasePath": "{{ panel_path }}",
+}
+
+for key, value in panel_settings.items():
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (key, value)
+    )
+
+# ── Admin credentials ─────────────────────────────────────────────────────────
+
+conn.execute(
+    "UPDATE users SET username = ?, password = ? WHERE id = 1",
+    ("{{ panel_user }}", "{{ panel_password }}")
+)
+
 conn.commit()
 conn.close()
-print("Inbound configured successfully")
+print("Inbound and panel configured successfully")

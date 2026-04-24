@@ -50,20 +50,48 @@ ansible-playbook playbook.yml -i inventory.ini
 
 ## Variables
 
-All variables have defaults and can be overridden per host in `inventory.ini` or with `-e` on the command line.
+All variables are defined in `vars.yml` and can be overridden per host in `inventory.ini` or with `-e` on the command line.
 
-| Variable           | Default          | Description                                      |
-|--------------------|------------------|--------------------------------------------------|
-| `install_dir`      | `/opt/3xui`      | Directory on the target VM for all 3x-ui data    |
-| `vpn_port`         | `8443`           | Port the VLESS inbound listens on                |
-| `vless_sni`        | `www.google.com` | SNI domain for Reality camouflage                |
-| `vless_fingerprint`| `chrome`         | TLS fingerprint for Reality                      |
-| `client_email`     | `client01`       | Label for the VLESS client in the 3x-ui panel    |
+### VPN inbound
 
-Override example:
+| Variable            | Default          | Description                                   |
+|---------------------|------------------|-----------------------------------------------|
+| `install_dir`       | `/opt/3xui`      | Directory on the target VM for all 3x-ui data |
+| `vpn_port`          | `8443`           | Port the VLESS inbound listens on             |
+| `vless_sni`         | `www.google.com` | SNI domain for Reality camouflage             |
+| `vless_fingerprint` | `chrome`         | TLS fingerprint for Reality                   |
+| `client_email`      | `client01`       | Label for the VLESS client in the 3x-ui panel |
+
+### Panel
+
+| Variable          | Default  | Description                                                        |
+|-------------------|----------|--------------------------------------------------------------------|
+| `panel_port`      | `2053`   | Port the 3x-ui web panel listens on                               |
+| `panel_user`      | `admin`  | Admin username for the panel                                       |
+| `panel_password`  | `admin`  | Admin password for the panel — **change this**                     |
+| `panel_path`      | `/`      | URL path prefix for the panel, e.g. `/mypanel/` hides it from scanners |
+| `panel_domain`    | `""`     | Domain for the panel (leave empty for HTTP/IP access)             |
+| `panel_cert_file` | `""`     | Absolute path to SSL certificate on the VM (e.g. `/root/cert/fullchain.pem`) |
+| `panel_key_file`  | `""`     | Absolute path to SSL private key on the VM (e.g. `/root/cert/privkey.pem`)   |
+
+### Panel HTTPS setup
+
+To enable HTTPS on the panel, copy your certs to the VM, then set the cert variables:
 
 ```bash
-ansible-playbook playbook.yml -i inventory.ini -e "vpn_port=443 client_email=myphone"
+ansible-playbook playbook.yml -i inventory.ini \
+  -e "panel_domain=vpn.example.com \
+      panel_cert_file=/root/cert/fullchain.pem \
+      panel_key_file=/root/cert/privkey.pem"
+```
+
+Or edit them directly in `vars.yml` before running.
+
+### Override example
+
+```bash
+ansible-playbook playbook.yml -i inventory.ini \
+  -e "vpn_port=8443 panel_user=myadmin panel_password=str0ngpass panel_path=/secret/"
 ```
 
 ## Output
