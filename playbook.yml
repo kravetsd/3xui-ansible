@@ -4,12 +4,8 @@
   become: true
   gather_facts: true
 
-  vars:
-    install_dir: /opt/3xui
-    vpn_port: 8443
-    vless_sni: www.google.com
-    vless_fingerprint: chrome
-    client_email: client01
+  vars_files:
+    - vars.yml
 
   tasks:
     # ── Generate crypto on control node ──────────────────────────────────────

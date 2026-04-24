@@ -1,0 +1,6 @@
+---
+install_dir: /opt/3xui
+vpn_port: 8443
+vless_sni: www.google.com
+vless_fingerprint: chrome
+client_email: client01
