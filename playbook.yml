@@ -1,0 +1,167 @@
+---
+- name: Setup 3x-ui VPN server
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    install_dir: /opt/3xui
+    vpn_port: 8443
+    vless_sni: www.google.com
+    vless_fingerprint: chrome
+    client_email: client01
+
+  tasks:
+    # ── Generate crypto on control node ──────────────────────────────────────
+
+    - name: Generate VLESS UUID
+      delegate_to: localhost
+      become: false
+      command: python3 -c "import uuid; print(uuid.uuid4())"
+      register: gen_uuid
+      changed_when: false
+      run_once: true
+
+    - name: Generate Reality X25519 keypair
+      delegate_to: localhost
+      become: false
+      command: >
+        python3 -c "
+        from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey;
+        import base64;
+        k = X25519PrivateKey.generate();
+        priv = base64.urlsafe_b64encode(k.private_bytes_raw()).decode().rstrip('=');
+        pub  = base64.urlsafe_b64encode(k.public_key().public_bytes_raw()).decode().rstrip('=');
+        print(priv + ' ' + pub)
+        "
+      register: gen_keypair
+      changed_when: false
+      run_once: true
+
+    - name: Generate Reality shortId
+      delegate_to: localhost
+      become: false
+      command: python3 -c "import secrets; print(secrets.token_hex(4))"
+      register: gen_shortid
+      changed_when: false
+      run_once: true
+
+    - name: Set crypto facts
+      set_fact:
+        vless_uuid: "{{ gen_uuid.stdout.strip() }}"
+        reality_private_key: "{{ gen_keypair.stdout.strip().split(' ')[0] }}"
+        reality_public_key: "{{ gen_keypair.stdout.strip().split(' ')[1] }}"
+        reality_short_id: "{{ gen_shortid.stdout.strip() }}"
+
+    # ── Install Docker ────────────────────────────────────────────────────────
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - python3
+          - sqlite3
+        state: present
+        update_cache: true
+
+    - name: Install Docker
+      shell: curl -fsSL https://get.docker.com | sh
+      args:
+        creates: /usr/bin/docker
+
+    # ── Directory structure ───────────────────────────────────────────────────
+
+    - name: Create 3x-ui directories
+      file:
+        path: "{{ install_dir }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - db
+        - cert
+        - xray
+
+    - name: Upload docker-compose.yml
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ install_dir }}/docker-compose.yml"
+        mode: '0644'
+
+    # ── Start container (initialises x-ui.db) ────────────────────────────────
+
+    - name: Start 3x-ui (first boot to create DB)
+      shell: docker compose -f {{ install_dir }}/docker-compose.yml up -d
+      args:
+        chdir: "{{ install_dir }}"
+
+    - name: Wait for x-ui.db to be created
+      wait_for:
+        path: "{{ install_dir }}/db/x-ui.db"
+        timeout: 60
+
+    - name: Give 3x-ui a moment to finish DB initialisation
+      pause:
+        seconds: 5
+
+    - name: Stop 3x-ui before editing DB
+      shell: docker compose -f {{ install_dir }}/docker-compose.yml down
+      args:
+        chdir: "{{ install_dir }}"
+
+    # ── Configure inbound via SQLite ──────────────────────────────────────────
+
+    - name: Upload inbound setup script
+      template:
+        src: templates/setup_inbound.py.j2
+        dest: /tmp/xui_setup_inbound.py
+        mode: '0700'
+
+    - name: Run inbound setup script
+      command: python3 /tmp/xui_setup_inbound.py
+
+    - name: Remove inbound setup script
+      file:
+        path: /tmp/xui_setup_inbound.py
+        state: absent
+
+    # ── Restart to apply config ───────────────────────────────────────────────
+
+    - name: Start 3x-ui with new inbound config
+      shell: docker compose -f {{ install_dir }}/docker-compose.yml up -d
+      args:
+        chdir: "{{ install_dir }}"
+
+    # ── Output connection details ─────────────────────────────────────────────
+
+    - name: VLESS connection string
+      debug:
+        msg: "vless://{{ vless_uuid }}@{{ ansible_host }}:{{ vpn_port }}?type=tcp&encryption=none&security=reality&pbk={{ reality_public_key }}&fp={{ vless_fingerprint }}&sni={{ vless_sni }}&sid={{ reality_short_id }}&spx=%2F&flow=xtls-rprx-vision#{{ inventory_hostname }}"
+
+    - name: xray-core client config
+      debug:
+        msg: |
+          {
+            "log": { "loglevel": "warning" },
+            "inbounds": [{
+              "listen": "127.0.0.1", "port": 1080, "protocol": "socks",
+              "settings": { "auth": "noauth", "udp": true }, "tag": "socks-in"
+            }],
+            "outbounds": [{
+              "tag": "proxy", "protocol": "vless",
+              "settings": { "vnext": [{ "address": "{{ ansible_host }}", "port": {{ vpn_port }},
+                "users": [{ "id": "{{ vless_uuid }}", "encryption": "none", "flow": "xtls-rprx-vision" }]
+              }]},
+              "streamSettings": {
+                "network": "tcp", "security": "reality",
+                "realitySettings": {
+                  "serverName": "{{ vless_sni }}", "fingerprint": "{{ vless_fingerprint }}",
+                  "publicKey": "{{ reality_public_key }}",
+                  "shortId": "{{ reality_short_id }}", "spiderX": "/"
+                }
+              }
+            }, { "tag": "direct", "protocol": "freedom" }],
+            "routing": { "domainStrategy": "AsIs",
+              "rules": [{ "type": "field", "inboundTag": ["socks-in"], "outboundTag": "proxy" }]
+            }
+          }
